@@ -7,6 +7,11 @@ All notable changes to TreeSitterMCP are documented here. The project follows
 
 ### Fixed
 
+- `query_ast` no longer crashes intermittently (SIGBUS/SIGSEGV, seen on
+  linux-arm64). go-tree-sitter v0.25.0's `MatchesWithOptions` passes a
+  Go-allocated options struct that Tree-sitter keeps and dereferences on every
+  later match, so its progress callback could become a wild pointer. Queries
+  now use plain `Matches`; cancellation is checked between matches.
 - Parsers are installed automatically on first start. Previously a build
   without `install` left the parser cache empty and every AST tool failed with
   "parser is not installed". The install runs in the background, is

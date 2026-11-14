@@ -193,7 +193,13 @@ func (e *Engine) query(ctx context.Context, in Input, p *parsed, fp string) (any
 	c := sitter.NewQueryCursor()
 	defer c.Close()
 	c.SetMatchLimit(1024)
-	matches := c.MatchesWithOptions(q, p.tree.RootNode(), p.source, sitter.QueryCursorOptions{ProgressCallback: func(sitter.QueryCursorState) bool { return ctx.Err() != nil }})
+	// Do not use MatchesWithOptions: go-tree-sitter v0.25.0 hands C a pointer
+	// to a Go-allocated TSQueryCursorOptions that ts_query_cursor_exec_with_options
+	// retains and dereferences on every later next_match call. Once the Go
+	// object moves or is collected the progress callback becomes a wild
+	// function pointer (SIGBUS/SIGSEGV, seen on linux-arm64). Cancellation is
+	// checked between matches instead, and the match limit bounds the work.
+	matches := c.Matches(q, p.tree.RootNode(), p.source)
 	items := []any{}
 	incomplete := false
 	matchIndex := 0
