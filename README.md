@@ -81,11 +81,11 @@ one has the server, the native library, and all 371 parsers ready to use.
 | Platform | File | Minimum OS |
 | --- | --- | --- |
 | Linux x86-64 | `TreeSitterMCP-<version>-linux-x86_64.tar.gz` | glibc 2.34 (Ubuntu 22.04, Debian 12, RHEL 9) |
-| Linux ARM64 | `TreeSitterMCP-<version>-linux-aarch64.tar.gz` | glibc 2.34 (Ubuntu 22.04, Debian 12, RHEL 9) |
+| Linux ARM64 | `TreeSitterMCP-<version>-linux-arm64.tar.gz` | glibc 2.34 (Ubuntu 22.04, Debian 12, RHEL 9) |
 | macOS Intel | `TreeSitterMCP-<version>-macos-x86_64.tar.gz` | macOS 15 |
 | macOS Apple Silicon | `TreeSitterMCP-<version>-macos-arm64.tar.gz` | macOS 15 |
 | Windows x86-64 | `TreeSitterMCP-<version>-windows-x86_64.zip` | Windows 10 |
-| Windows ARM64 | `TreeSitterMCP-<version>-windows-aarch64.zip` | Windows 11 |
+| Windows ARM64 | `TreeSitterMCP-<version>-windows-arm64.zip` | Windows 11 |
 
 The minimums come from the upstream native library: its Linux builds need
 glibc 2.34 (musl/Alpine is not supported) and its macOS builds target macOS 15.
@@ -725,6 +725,10 @@ No. Python is needed only for the optional interoperability tests.
 - Built-in exclusions are not a full `.gitignore` implementation or secret
   detector, and they are not a sandbox around native parser code.
 - Folder statistics are point-in-time scans and can go stale if files change.
+- The bundled cmake parser (language pack 1.25.0) has an upstream scanner bug:
+  it reads uninitialized memory while recovering from syntax errors, so
+  malformed CMake can occasionally produce different trees for identical
+  input. Valid CMake parses consistently.
 
 ---
 

@@ -3,7 +3,7 @@ description: Installs Go, Python, and a CGO C compiler, and exposes the native F
 
 inputs:
   platform:
-    description: "Target platform: linux-x86_64, linux-aarch64, macos-x86_64, macos-arm64, windows-x86_64, windows-aarch64"
+    description: "Target platform: linux-x86_64, linux-arm64, macos-x86_64, macos-arm64, windows-x86_64, windows-arm64"
     required: true
 
 runs:
@@ -16,9 +16,21 @@ runs:
         cache: true
 
     - name: Set up Python
+      if: inputs.platform != 'windows-arm64'
       uses: actions/setup-python@v6
       with:
         python-version: "3.12"
+
+    # The Python MCP SDK needs cryptography, which has no Windows ARM64 wheel
+    # and cannot build from source there without OpenSSL. Python is only the
+    # test client, so run x64 Python under emulation; the server under test is
+    # still the native ARM64 build.
+    - name: Set up Python (x64 on Windows ARM64)
+      if: inputs.platform == 'windows-arm64'
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.12"
+        architecture: x64
 
     # Windows x64: MinGW-w64 GCC (UCRT) from MSYS2.
     - name: Install MinGW-w64 GCC
@@ -33,7 +45,7 @@ runs:
     # Windows ARM64: LLVM/Clang targeting aarch64-w64-mingw32 from MSYS2.
     - name: Install LLVM MinGW Clang (ARM64)
       id: msys2-arm64
-      if: inputs.platform == 'windows-aarch64'
+      if: inputs.platform == 'windows-arm64'
       uses: msys2/setup-msys2@v2
       with:
         msystem: CLANGARM64
@@ -44,7 +56,7 @@ runs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        if ('${{ inputs.platform }}' -eq 'windows-aarch64') {
+        if ('${{ inputs.platform }}' -eq 'windows-arm64') {
           $bin = Join-Path '${{ steps.msys2-arm64.outputs.msys2-location }}' 'clangarm64\bin'
           $cc = 'clang'
         } else {
@@ -52,7 +64,9 @@ runs:
           $cc = 'gcc'
         }
         # The FFI DLL must be on PATH for go test and the built server.
-        $lib = Join-Path $env:GITHUB_WORKSPACE 'third_party\languagepack\.lib\${{ inputs.platform }}'
+        # Upstream names the ARM64 library folder "aarch64".
+        $pack = '${{ inputs.platform }}' -replace '-arm64$', '-aarch64'
+        $lib = Join-Path $env:GITHUB_WORKSPACE "third_party\languagepack\.lib\$pack"
         Add-Content $env:GITHUB_PATH $bin
         Add-Content $env:GITHUB_PATH $lib
         Add-Content $env:GITHUB_ENV "CC=$cc"

@@ -32,6 +32,16 @@ All notable changes to TreeSitterMCP are documented here. The project follows
   `gcc`/`clang` when it is not on `PATH`.
 - Release builds fail if a Linux binary would require newer than glibc 2.34.
   The README lists the minimum OS for each platform.
+- ARM64 release archives and CI jobs are named `linux-arm64` and
+  `windows-arm64` (were `linux-aarch64` and `windows-aarch64`), matching
+  `macos-arm64`. Upstream native and parser downloads keep their own names.
+- The Windows ARM64 CI job no longer fails installing the Python MCP test
+  client: `cryptography` has no Windows ARM64 wheel, so the client runs on x64
+  Python under emulation while the server under test stays native ARM64.
+- The all-grammar contract test no longer fails intermittently on cmake. The
+  pinned cmake scanner reads uninitialized memory during error recovery, so
+  identical malformed input could parse differently; the test now uses a
+  valid cmake fixture. See Limitations in the README.
 
 ## 1.0.0 - 2026-11-14
 

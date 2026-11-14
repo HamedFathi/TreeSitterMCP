@@ -21,7 +21,7 @@ import tempfile
 import zipfile
 
 BASE = Path(__file__).resolve().parents[1]
-PLATFORMS = {"linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64", "windows-x86_64", "windows-aarch64"}
+PLATFORMS = {"linux-x86_64", "linux-arm64", "macos-x86_64", "macos-arm64", "windows-x86_64", "windows-arm64"}
 DOCS = ["LICENSE", "NOTICE", "README.md", "CHANGELOG.md", "SECURITY.md", "docs/LANGUAGES.md",
         "third_party/GRAMMAR_NOTICES.md", "third_party/grammar-provenance.json", "third_party/SOURCE.md",
         "third_party/languagepack/LICENSE", "examples/claude_desktop_config.json", "examples/claude_desktop_windows.json"]
