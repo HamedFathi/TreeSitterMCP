@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "TreeSitterMCP": {
+      "command": "/absolute/path/to/TreeSitterMCP/bin/TreeSitterMCP",
+      "args": ["--allow-root", "/absolute/path/to/code", "--state-dir", "/absolute/path/to/private/TreeSitterMCP-state"]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+name: Feature request
+description: Describe a concrete code-exploration need.
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: Use case
+      description: What task is difficult with the existing tools?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include example inputs and expected bounded output when helpful.
+    validations:
+      required: true

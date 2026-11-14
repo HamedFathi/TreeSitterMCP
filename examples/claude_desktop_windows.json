@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "TreeSitterMCP": {
+      "command": "C:\\tools\\TreeSitterMCP\\bin\\TreeSitterMCP.exe",
+      "args": ["--allow-root", "C:\\code", "--state-dir", "C:\\private\\TreeSitterMCP-state"]
+    }
+  }
+}

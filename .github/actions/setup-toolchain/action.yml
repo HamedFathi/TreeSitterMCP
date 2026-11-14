@@ -1,0 +1,75 @@
+name: Set up TreeSitterMCP toolchain
+description: Installs Go, Python, and a CGO C compiler, and exposes the native FFI library path.
+
+inputs:
+  platform:
+    description: "Target platform: linux-x86_64, linux-aarch64, macos-x86_64, macos-arm64, windows-x86_64, windows-aarch64"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: go.mod
+        cache: true
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.12"
+
+    # Windows x64: MinGW-w64 GCC (UCRT) from MSYS2.
+    - name: Install MinGW-w64 GCC
+      id: msys2-x64
+      if: inputs.platform == 'windows-x86_64'
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: false
+        install: mingw-w64-ucrt-x86_64-gcc
+
+    # Windows ARM64: LLVM/Clang targeting aarch64-w64-mingw32 from MSYS2.
+    - name: Install LLVM MinGW Clang (ARM64)
+      id: msys2-arm64
+      if: inputs.platform == 'windows-aarch64'
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: CLANGARM64
+        update: false
+        install: mingw-w64-clang-aarch64-clang
+
+    - name: Configure CGO (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        if ('${{ inputs.platform }}' -eq 'windows-aarch64') {
+          $bin = Join-Path '${{ steps.msys2-arm64.outputs.msys2-location }}' 'clangarm64\bin'
+          $cc = 'clang'
+        } else {
+          $bin = Join-Path '${{ steps.msys2-x64.outputs.msys2-location }}' 'ucrt64\bin'
+          $cc = 'gcc'
+        }
+        # The FFI DLL must be on PATH for go test and the built server.
+        $lib = Join-Path $env:GITHUB_WORKSPACE 'third_party\languagepack\.lib\${{ inputs.platform }}'
+        Add-Content $env:GITHUB_PATH $bin
+        Add-Content $env:GITHUB_PATH $lib
+        Add-Content $env:GITHUB_ENV "CC=$cc"
+        Add-Content $env:GITHUB_ENV 'CGO_ENABLED=1'
+
+    - name: Configure CGO (Linux/macOS)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        echo "CGO_ENABLED=1" >> "$GITHUB_ENV"
+        # Git checkouts made on Windows may lose the executable bit.
+        chmod +x scripts/*.sh
+
+    - name: Show toolchain
+      shell: bash
+      run: |
+        go version
+        go env GOOS GOARCH CC CGO_ENABLED
+        python --version
+        "$(go env CC)" --version | head -n 1

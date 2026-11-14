@@ -1,0 +1,11 @@
+TreeSitterMCP
+Copyright (c) 2026 Hamed
+
+The server and projecttree code are distributed under the MIT license.
+This distribution includes or depends on separately licensed third-party code
+and parser libraries. Their licenses remain applicable to their components.
+
+See third_party/languagepack/LICENSE for the Go language-pack binding license,
+third_party/GRAMMAR_NOTICES.md for grammar license texts and origins,
+third_party/grammar-provenance.json for pinned grammar provenance, and
+third_party/SOURCE.md for source and redistribution details.

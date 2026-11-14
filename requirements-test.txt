@@ -1,0 +1,2 @@
+# Optional cross-SDK interoperability tests only; not a server runtime dependency.
+mcp==1.29.0

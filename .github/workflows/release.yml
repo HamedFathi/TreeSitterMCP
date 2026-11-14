@@ -1,0 +1,209 @@
+name: Release
+
+# Push a tag such as v1.0.0 to build, verify, and publish all six platforms.
+# Run manually (workflow_dispatch) for a dry run that builds artifacts without publishing.
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish a GitHub release (requires running on a v*.*.* tag)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Resolve version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: v
+        name: Check tag matches server.Version
+        run: |
+          code_version="$(sed -n 's/^const Version = "\(.*\)"$/\1/p' server/types.go)"
+          if [ -z "$code_version" ]; then echo "::error::Version constant not found in server/types.go"; exit 1; fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            tag_version="${GITHUB_REF_NAME#v}"
+            if [ "$tag_version" != "$code_version" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match server.Version $code_version"; exit 1
+            fi
+          fi
+          if ! grep -q "^## $code_version " CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## $code_version' section"; exit 1
+          fi
+          case "$code_version" in *-*) pre=true ;; *) pre=false ;; esac
+          echo "version=$code_version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$pre" >> "$GITHUB_OUTPUT"
+          echo "Releasing TreeSitterMCP $code_version (prerelease=$pre)"
+
+  test:
+    name: Full test suite
+    needs: version
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: [version, test]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { platform: linux-x86_64,    runner: ubuntu-24.04 }
+          - { platform: linux-aarch64,   runner: ubuntu-24.04-arm }
+          - { platform: macos-x86_64,    runner: macos-15-intel }
+          - { platform: macos-arm64,     runner: macos-15 }
+          - { platform: windows-x86_64,  runner: windows-2025 }
+          - { platform: windows-aarch64, runner: windows-11-arm }
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          platform: ${{ matrix.platform }}
+
+      - name: Build and install parsers
+        if: runner.os != 'Windows'
+        run: sh scripts/install.sh
+
+      - name: Build and install parsers
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/install.ps1
+
+      - name: Show linkage
+        run: |
+          case "$RUNNER_OS" in
+            Linux)
+              ldd bin/TreeSitterMCP || true
+              readelf -d bin/TreeSitterMCP | grep -Ei 'rpath|runpath' || true
+              # The native library needs glibc 2.34 (Ubuntu 22.04+, Debian 12+,
+              # RHEL 9+); the server must not raise that floor.
+              for f in bin/TreeSitterMCP bin/packctl bin/libts_pack_core_ffi.so; do
+                need="$(objdump -T "$f" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1)"
+                echo "$f requires $need"
+                if [ "$(printf '%s\nGLIBC_2.34\n' "$need" | sort -V | tail -n 1)" != "GLIBC_2.34" ]; then
+                  echo "::error::$f requires $need; maximum supported is GLIBC_2.34"; exit 1
+                fi
+              done ;;
+            macOS) otool -L bin/TreeSitterMCP; otool -l bin/TreeSitterMCP | grep -A2 LC_RPATH || true ;;
+            Windows) ls -la bin ;;
+          esac
+
+      - name: Package
+        id: package
+        run: python scripts/package.py --version "$VERSION" --platform "${{ matrix.platform }}" --out dist
+
+      # Verify the archive on its own: hide the checkout's native library and
+      # parsers, extract into a fresh folder, then run the real MCP client test.
+      - name: Smoke test the extracted archive
+        run: |
+          mv third_party/languagepack/.lib "$RUNNER_TEMP/lib-hidden"
+          mv runtime "$RUNNER_TEMP/runtime-hidden"
+          dest="$RUNNER_TEMP/extract"
+          mkdir -p "$dest"
+          archive="${{ steps.package.outputs.archive }}"
+          case "$archive" in
+            *.zip)    python -m zipfile -e "$archive" "$dest" ;;
+            *.tar.gz) tar -xzf "$archive" -C "$dest" ;;
+          esac
+          app="$dest/TreeSitterMCP-$VERSION-${{ matrix.platform }}"
+          mkdir -p "$app/scripts"
+          cp scripts/test_stdio.py "$app/scripts/"
+          out="$("$app/bin/TreeSitterMCP" --version)"
+          echo "$out"
+          echo "$out" | grep -q "TreeSitterMCP $VERSION" || { echo "::error::unexpected --version output"; exit 1; }
+          python -m pip install -r requirements-test.txt
+          python "$app/scripts/test_stdio.py"
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v5
+        with:
+          name: release-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub release
+    needs: [version, build]
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.publish)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create checksums
+        working-directory: dist
+        run: |
+          ls -la
+          count=$(ls TreeSitterMCP-* | grep -vc '\.sha256$')
+          [ "$count" -eq 6 ] || { echo "::error::expected 6 archives, found $count"; exit 1; }
+          cat *.sha256 > SHA256SUMS.txt
+          rm -f *.sha256
+          sha256sum -c SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Write release notes
+        run: |
+          {
+            awk -v v="$VERSION" '
+              $0 ~ "^## " v " " {found=1; next}
+              found && /^## / {exit}
+              found {print}
+            ' CHANGELOG.md
+            cat <<EOF
+
+          ## Downloads
+
+          | Platform | Archive |
+          | --- | --- |
+          | Linux x86-64 | \`TreeSitterMCP-$VERSION-linux-x86_64.tar.gz\` |
+          | Linux ARM64 | \`TreeSitterMCP-$VERSION-linux-aarch64.tar.gz\` |
+          | macOS Intel | \`TreeSitterMCP-$VERSION-macos-x86_64.tar.gz\` |
+          | macOS Apple Silicon | \`TreeSitterMCP-$VERSION-macos-arm64.tar.gz\` |
+          | Windows x86-64 | \`TreeSitterMCP-$VERSION-windows-x86_64.zip\` |
+          | Windows ARM64 | \`TreeSitterMCP-$VERSION-windows-aarch64.zip\` |
+
+          Each archive includes the server, the native library, and all 371 prepared parsers.
+          Extract it, keep the folder structure, and point your MCP client at \`bin/TreeSitterMCP\` (\`bin\\TreeSitterMCP.exe\` on Windows).
+          Verify downloads with \`SHA256SUMS.txt\`. See the README for client setup.
+          EOF
+          } > notes.md
+          cat notes.md
+
+      - name: Create release
+        run: |
+          flags=()
+          [ "${{ needs.version.outputs.prerelease }}" = "true" ] && flags+=(--prerelease)
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "TreeSitterMCP $VERSION" \
+            --notes-file notes.md \
+            --verify-tag "${flags[@]}"

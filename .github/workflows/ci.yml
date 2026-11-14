@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**", "LICENSE", "NOTICE"]
+  pull_request:
+    paths-ignore: ["**.md", "docs/**", "LICENSE", "NOTICE"]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check gofmt
+        run: |
+          unformatted="$(gofmt -l cmd server projecttree internal examples)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files need gofmt:"; echo "$unformatted"; exit 1
+          fi
+      - name: Check go.mod is tidy
+        run: |
+          go mod tidy -diff
+      - name: Test projecttree (pure Go, no CGO)
+        run: CGO_ENABLED=0 go test ./projecttree
+      - name: Check Python scripts compile
+        run: python3 -m py_compile scripts/*.py
+
+  test:
+    name: Test (${{ matrix.platform }})
+    needs: lint
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux-x86_64,    runner: ubuntu-24.04,     race: true }
+          - { platform: linux-aarch64,   runner: ubuntu-24.04-arm, race: true }
+          - { platform: macos-x86_64,    runner: macos-15-intel,   race: true }
+          - { platform: macos-arm64,     runner: macos-15,         race: true }
+          - { platform: windows-x86_64,  runner: windows-2025,     race: true }
+          - { platform: windows-aarch64, runner: windows-11-arm,   race: false }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          platform: ${{ matrix.platform }}
+
+      - name: Install native library, binaries, and all 371 parsers
+        if: runner.os != 'Windows'
+        run: sh scripts/install.sh
+
+      - name: Install native library, binaries, and all 371 parsers
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/install.ps1
+
+      - name: Check version
+        run: ./bin/TreeSitterMCP --version
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Go test
+        run: go test -count=1 ./...
+
+      - name: Go test with race detector
+        if: matrix.race
+        run: go test -race -count=1 ./...
+
+      - name: Install Python MCP client
+        run: python -m pip install -r requirements-test.txt
+
+      - name: MCP stdio interoperability (official Python SDK)
+        run: python scripts/test_stdio.py
+
+      - name: MCP stdio on every grammar
+        run: python scripts/test_all_languages_stdio.py > all-languages-stdio.json
+
+      - name: Upload all-grammar report
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: all-languages-stdio-${{ matrix.platform }}
+          path: all-languages-stdio.json
+          if-no-files-found: ignore
+          retention-days: 14

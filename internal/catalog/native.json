@@ -1,0 +1,37 @@
+{
+  "version": "1.25.0",
+  "module_zip_url": "https://proxy.golang.org/github.com/xberg-io/tree-sitter-language-pack/packages/go/@v/v1.25.0.zip",
+  "module_zip_sha256": "ee0f52f489ccd1ff104d4eeff0066a9986e1194e2b830556999259673879d392",
+  "platforms": {
+    "macos-x86_64": {
+      "file_name": "libts_pack_core_ffi.dylib",
+      "sha256": "a93e56ab1aaf8e40babd650aadbe3eb260638c64b8f110261ed0667d99a5fc9f",
+      "size": 5053040
+    },
+    "linux-x86_64": {
+      "file_name": "libts_pack_core_ffi.so",
+      "sha256": "5e5c3fe60a499541640bbb21d8db491b2376e8246a4af20ce108747d38dfa344",
+      "size": 5635640
+    },
+    "windows-x86_64": {
+      "file_name": "ts_pack_core_ffi.dll",
+      "sha256": "a4e99f1da78bb8a0414e8d605c6a6fa4f86d1855a25ee6d4e4c6aa2493d500e7",
+      "size": 6014464
+    },
+    "windows-aarch64": {
+      "file_name": "ts_pack_core_ffi.dll",
+      "sha256": "48578e49f1fe157fbbfc2ea05cec74341f531f37fb77d20b507c3898f836ddd6",
+      "size": 5420544
+    },
+    "linux-aarch64": {
+      "file_name": "libts_pack_core_ffi.so",
+      "sha256": "86352a693d153b259f3533dfbd85e99047f596c1732862e855ea572f0e8f7554",
+      "size": 5118096
+    },
+    "macos-arm64": {
+      "file_name": "libts_pack_core_ffi.dylib",
+      "sha256": "b087167cda61228e788b65b92a6cc9cd4d4bf93b9c1150e5c0197ef91e08ebd6",
+      "size": 4730056
+    }
+  }
+}
